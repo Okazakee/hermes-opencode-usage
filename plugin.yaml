@@ -1,0 +1,9 @@
+name: opencode-usage
+version: "1.0.0"
+description: >
+  Monitors OpenCode Go plan usage by scraping the workspace dashboard.
+  Requires an auth cookie from the browser. Periodically checks rolling,
+  weekly, and monthly usage and alerts when thresholds are exceeded.
+author: Okazakee
+kind: plugin
+requires_env: []
