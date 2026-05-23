@@ -1,5 +1,5 @@
 """
-OpenCode Go Usage Monitor — Hermes Agent Plugin
+OpenCode Go Usage Monitor - Hermes Agent Plugin
 
 Scrapes https://opencode.ai/workspace/wrk_{id}/go for usage stats
 from the embedded script data and DOM elements.
@@ -119,7 +119,7 @@ def _fetch_page(workspace_id: str, auth_cookie: str) -> dict:
         if "authorize?client_id" in body or "login" in body.lower()[:500]:
             return {
                 "success": False,
-                "error": "Response contains login page — cookie likely expired",
+                "error": "Response contains login page, cookie likely expired",
                 "auth_failure": True,
             }
 
@@ -261,7 +261,56 @@ def _check_thresholds(values: list[str], thresholds: dict) -> list[dict]:
     return alerts
 
 
-# ── Tool handler: check ────────────────────────────────────────────────
+# ── Formatting helpers ──────────────────────────────────────────────────
+
+def _status_emoji(status: str) -> str:
+    if status == "ok":
+        return "✅"
+    elif status == "warning":
+        return "⚠️"
+    elif status == "critical":
+        return "🔴"
+    return "❓"
+
+
+def _fmt_bar(pct: float, width: int = 10) -> str:
+    filled = round(pct / 100 * width)
+    empty = width - filled
+    return "█" * filled + "░" * empty
+
+
+def _format_check_response(data: dict) -> str:
+    """Format usage data into a Telegram-friendly string."""
+    dom = data.get("dom", {})
+    alerts = data.get("alerts", [])
+    overall = data.get("overall_status", "unknown")
+
+    lines = []
+    lines.append("📊 **OpenCode Go Usage**")
+    lines.append("")
+
+    for alert in alerts:
+        bucket = alert["bucket"]
+        pct = alert["usage_pct"]
+        status = alert["status"]
+        emoji = _status_emoji(status)
+        label = dom.get(f"{bucket}_label", bucket)
+        reset = dom.get(f"{bucket}_reset", "")
+        bar = _fmt_bar(pct)
+        lines.append(f"{emoji} **{label}:** {pct:.0f}%")
+        lines.append(f"   `{bar}`")
+        if reset:
+            lines.append(f"   _{reset}_")
+
+    lines.append("")
+    overall_emoji = _status_emoji(overall)
+    lines.append(f"{overall_emoji} **Overall:** {overall.upper()}")
+
+    if data.get("cookie_refreshed"):
+        lines.append("")
+        lines.append("🔄 Auth cookie was auto-refreshed by the server.")
+
+    return "\n".join(lines)
 
 def _handle_check(params: dict, **kwargs) -> str:
     """Handler for check_opencode_usage tool."""
@@ -278,16 +327,10 @@ def _handle_check(params: dict, **kwargs) -> str:
             _save_config(config)
 
     if not workspace_id:
-        return json.dumps({
-            "success": False,
-            "error": "No workspace_id configured. Call `configure_opencode_usage` to set it up, or pass workspace_id and auth_cookie directly.",
-        })
+        return "❌ **No workspace configured.** Call `configure_opencode_usage` to set it up, or pass `workspace_id` and `auth_cookie` directly."
 
     if not auth_cookie:
-        return json.dumps({
-            "success": False,
-            "error": "No auth_cookie configured. Call `configure_opencode_usage` to set it up, or pass workspace_id and auth_cookie directly.",
-        })
+        return "❌ **No auth cookie configured.** Call `configure_opencode_usage` to set it up, or pass `auth_cookie` directly."
 
     fetch = _fetch_page(workspace_id, auth_cookie)
     if not fetch["success"]:
@@ -296,7 +339,8 @@ def _handle_check(params: dict, **kwargs) -> str:
             if config.get("auth_cookie") == auth_cookie:
                 config["auth_cookie"] = ""
                 _save_config(config)
-        return json.dumps(fetch)
+            return "🔴 **Auth cookie expired or invalid.** The cookie has been cleared. Please refresh it with `configure_opencode_usage`."
+        return f"❌ **Error fetching usage:** {fetch.get('error', 'Unknown error')}"
 
     html = fetch["html"]
 
@@ -343,7 +387,7 @@ def _handle_check(params: dict, **kwargs) -> str:
     config["last_status"] = response["overall_status"]
     _save_config(config)
 
-    return json.dumps(response)
+    return _format_check_response(response)
 
 
 # ── CLI commands ────────────────────────────────────────────────────────
@@ -518,7 +562,7 @@ def _cli_check(args: argparse.Namespace) -> None:
             print(f"     Resets: {reset}")
 
     if not alerts:
-        print("  (no usage data found — check credentials)")
+        print("  (no usage data found, check credentials)")
 
     print(f"\n  Overall: {data.get('overall_status', 'unknown').upper()}")
 
@@ -585,10 +629,7 @@ def _handle_configure(params: dict, **kwargs) -> str:
     auth_cookie = params.get("auth_cookie", "").strip()
 
     if not workspace_id or not auth_cookie:
-        return json.dumps({
-            "success": False,
-            "error": "Both workspace_id and auth_cookie are required.",
-        })
+        return "❌ **Both `workspace_id` and `auth_cookie` are required.**"
 
     config["workspace_id"] = workspace_id
     config["auth_cookie"] = auth_cookie
@@ -606,18 +647,15 @@ def _handle_configure(params: dict, **kwargs) -> str:
     interval = config.get("check_interval_hours", 6)
     cron_result = _manage_cron_job(config)
 
-    return json.dumps({
-        "success": True,
-        "message": "Configuration saved. You can now call check_opencode_usage.",
-        "cron": cron_result,
-        "config": {
-            "workspace_id": config["workspace_id"],
-            "auth_cookie": "✓ set (hidden)",
-            "warning_threshold": config.get("alert_thresholds", {}).get("warning", 70),
-            "critical_threshold": config.get("alert_thresholds", {}).get("critical", 90),
-            "check_interval_hours": interval,
-        },
-    })
+    return (
+        "✅ **OpenCode Usage Monitor configured successfully**\n\n"
+        f"Workspace: `{config['workspace_id']}`\n"
+        f"Auth cookie: ✓ set (hidden)\n"
+        f"Warning threshold: {config.get('alert_thresholds', {}).get('warning', 70)}%\n"
+        f"Critical threshold: {config.get('alert_thresholds', {}).get('critical', 90)}%\n"
+        f"Check interval: every {interval}h\n\n"
+        f"Cron: {cron_result.get('cron_action', cron_result.get('reason', 'unknown'))}"
+    )
 
 
 # ── Registration ────────────────────────────────────────────────────────
