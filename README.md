@@ -1,12 +1,12 @@
 # Hermes OpenCode Usage Monitor
 
-A [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin that monitors your **OpenCode Go** plan usage. It scrapes the workspace dashboard to track rolling, weekly, and monthly usage, and alerts you when thresholds are exceeded.
+A [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin that monitors your **OpenCode Go** plan usage. It fetches your workspace dashboard to track rolling, weekly, and monthly usage, and alerts you when thresholds are exceeded.
 
 ## Features
 
 - 📊 Checks **rolling, weekly, and monthly** usage percentages
 - ⏰ **Automatic periodic checks** via Hermes cron (self-managing)
-- 🔔 **Threshold alerts** — configurable warning and critical levels
+- 🔔 **Threshold alerts** with configurable warning and critical levels
 - 🔄 **Auto-refreshes** expired cookies when the server sends a new one
 - 🛡️ **Detects stale cookies** and clears them so you know to refresh
 - 🖥️ **CLI commands** for quick checks and configuration
@@ -26,10 +26,11 @@ git clone https://github.com/Okazakee/hermes-opencode-usage.git \
   ~/.hermes/plugins/opencode-usage
 ```
 
-### Option 2: Manual copy
+### Option 2: Manual copy (clone anywhere)
 
 ```bash
 git clone https://github.com/Okazakee/hermes-opencode-usage.git
+mkdir -p ~/.hermes/plugins/opencode-usage
 cp hermes-opencode-usage/plugin.yaml hermes-opencode-usage/__init__.py \
   ~/.hermes/plugins/opencode-usage/
 ```
@@ -115,7 +116,7 @@ Ask the agent:
 
 ### Automatic scheduling
 
-When you configure the plugin via `setup`, it automatically creates a Hermes cron job that checks your usage periodically (default: every 6 hours). If usage is within limits, the check runs silently. If it exceeds a threshold, you get an alert in your configured delivery channel.
+When configured via `setup`, the plugin automatically creates a Hermes cron job that checks your usage periodically (default: every 6 hours). Checks run silently when usage is within limits; you only hear about it when a threshold is exceeded.
 
 ## Configuration
 
@@ -123,8 +124,8 @@ Settings are stored in `~/.hermes/plugins/opencode-usage/config.json`:
 
 | Setting | Default | Description |
 |---|---|---|
-| `workspace_id` | — | Your OpenCode workspace ID |
-| `auth_cookie` | — | Auth cookie from browser |
+| `workspace_id` | *(required)* | Your OpenCode workspace ID |
+| `auth_cookie` | *(required)* | Auth cookie from browser |
 | `check_interval_hours` | `6` | How often to check (hours) |
 | `alert_thresholds.warning` | `70` | Warning threshold (%) |
 | `alert_thresholds.critical` | `90` | Critical threshold (%) |
@@ -133,7 +134,7 @@ Settings are stored in `~/.hermes/plugins/opencode-usage/config.json`:
 
 - The **auth cookie** is stored in plaintext in `~/.hermes/plugins/opencode-usage/config.json`
 - Make sure your `~/.hermes` directory has appropriate permissions (`chmod 700 ~/.hermes`)
-- The cookie is only sent to `opencode.ai` — never exposed to third parties
+- The cookie is only sent to `opencode.ai` and is never exposed to third parties
 - If the cookie expires, the plugin detects it automatically and clears it so you know to refresh
 
 ## Troubleshooting
